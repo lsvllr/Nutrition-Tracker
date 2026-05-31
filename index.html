@@ -583,13 +583,6 @@ body {
 // ─── CONFIG ───────────────────────────────────────────────────
 const GOALS = { kcal: 2200, protein: 110, fat: 75, carbs: 280, fiber: 30 };
 
-// Apple Watch Gesamtenergie — wird durch Einträge in nutrition.md überschrieben
-// Format: 'DD.MM.': kcal
-const AW_FALLBACK = {
-  '29.05.': 2733,
-  '30.05.': 2369,
-};
-
 const COLORS = {
   kcal: '#4ADE80', protein: '#60A5FA', fat: '#FBBF24', carbs: '#A78BFA', fiber: '#34D399'
 };
@@ -787,9 +780,11 @@ function parseMD(text) {
         const dm = cells2[0].match(/(\d{1,2})\.(\d{1,2})/);
         if (dm) {
           const date   = pad(dm[1]) + '.' + pad(dm[2]) + '.';
-          const eaten  = int(cells2[1]);
-          const burned = int(cells2[2]);
-          if (burned > 0) energy[date] = { eaten, burned };
+          // Nicht überschreiben wenn Haupttabelle explizit — gesetzt hat
+          if (!energy[date] || !energy[date].explicit_none) {
+            const burned = int(cells2[2]);
+            if (burned > 0) energy[date] = { eaten: int(cells2[1]), burned };
+          }
         }
       }
       ctx = null; continue;
@@ -840,10 +835,15 @@ function parseMD(text) {
     if (ctx === 'energy' && cells.length >= 3) {
       const dm = cells[0].match(/(\d{1,2})\.(\d{1,2})/);
       if (!dm) continue;
-      const date   = pad(dm[1]) + '.' + pad(dm[2]) + '.';
-      const eaten  = int(cells[1]);
-      const burned = int(cells[2]);
-      if (burned > 0) energy[date] = { eaten, burned };
+      const date      = pad(dm[1]) + '.' + pad(dm[2]) + '.';
+      const rawBurned = cells[2].replace(/\s/g, '');
+      if (rawBurned === '—' || rawBurned === '-' || rawBurned === '') {
+        // Explizit kein Wert — sperrt spätere Kommentarblöcke
+        energy[date] = { eaten: 0, burned: 0, explicit_none: true };
+      } else {
+        const burned = int(rawBurned);
+        if (burned > 0) energy[date] = { eaten: int(cells[1]), burned };
+      }
     }
 
   }
@@ -859,7 +859,16 @@ function parseMD(text) {
 // ─── STATE ────────────────────────────────────────────────────
 let data        = null;
 let activeDate  = null;
-let openKWs     = new Set(); // which KW groups are expanded
+let openKWs     = new Set();
+
+// AW-Gesamtenergie: ausschließlich aus nutrition.md (Energiebilanz-Sektion)
+function getAW(date) {
+  if (data && data.energy && data.energy[date]) {
+    const b = data.energy[date].burned;
+    if (b > 0) return b;
+  }
+  return null;
+}
 
 // ─── RENDER SIDEBAR ───────────────────────────────────────────
 function renderSidebar() {
