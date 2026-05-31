@@ -155,11 +155,12 @@ body {
 
 /* ─── SIDEBAR ────────────────────────────────── */
 .sidebar {
-  width: 190px;
-  min-width: 190px;
+  width: 200px;
+  min-width: 200px;
   border-right: 1px solid var(--border);
   background: var(--bg2);
   padding: 18px 0;
+  overflow-y: auto;
 }
 
 .sidebar-lbl {
@@ -172,21 +173,88 @@ body {
   margin-bottom: 10px;
 }
 
-.day-row {
+/* ─── KW ACCORDION ───────────────────────────── */
+.kw-group { margin-bottom: 2px; }
+
+.kw-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 9px 14px;
   cursor: pointer;
   border-left: 2px solid transparent;
+  transition: background .15s, border-color .15s;
+  user-select: none;
+}
+
+.kw-header:hover { background: var(--bg3); }
+
+.kw-header.current-week {
+  border-left-color: var(--green);
+  background: rgba(74,222,128,0.05);
+}
+
+.kw-header.current-week .kw-label {
+  color: var(--green);
+}
+
+.kw-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.kw-range {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.kw-meta { flex: 1; }
+
+.kw-chevron {
+  font-size: 10px;
+  color: var(--muted);
+  transition: transform .2s ease;
+  flex-shrink: 0;
+}
+
+.kw-group.open .kw-chevron { transform: rotate(180deg); }
+
+.kw-days {
+  display: none;
+  overflow: hidden;
+}
+
+.kw-group.open .kw-days { display: block; }
+
+/* animate open */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.kw-group.open .kw-days { animation: slideDown .15s ease; }
+
+.day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px 7px 22px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
   transition: .15s;
 }
 
 .day-row:hover  { background: var(--bg3); }
-.day-row.active { background: var(--bg3); border-left-color: var(--green); }
+.day-row.active {
+  background: var(--bg3);
+  border-left-color: var(--green);
+}
 
-.day-date { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; }
-.day-kcal { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.day-date { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 400; }
+.day-kcal { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
 
 /* ─── MAIN ───────────────────────────────────── */
 .main {
@@ -256,8 +324,8 @@ body {
   user-select: none;
 }
 
-.meal-card:hover        { border-color: #2D4433; }
-.meal-card.open         { border-color: #2D4433; }
+.meal-card:hover { border-color: #2D4433; }
+.meal-card.open  { border-color: #2D4433; }
 
 .meal-header {
   display: grid;
@@ -266,8 +334,8 @@ body {
   gap: 14px;
 }
 
-.m-type  { font-size: 13px; font-weight: 600; }
-.m-kcal  { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; color: var(--green); }
+.m-type   { font-size: 13px; font-weight: 600; }
+.m-kcal   { font-family: 'JetBrains Mono', monospace; font-size: 16px; font-weight: 500; color: var(--green); }
 .m-macros { display: flex; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
 .m-macros b { color: var(--text); font-weight: 400; }
 
@@ -417,9 +485,7 @@ body {
 
 @media (max-width: 680px) {
   .stat-row  { grid-template-columns: repeat(3, 1fr); }
-  .sidebar   { width: 120px; min-width: 120px; }
-  .meal-card { grid-template-columns: 1fr 50px; }
-  .m-macros, .m-notes { display: none; }
+  .sidebar   { width: 140px; min-width: 140px; }
   .main      { padding: 16px; }
   .micro-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
@@ -453,8 +519,8 @@ body {
 
   <div class="body">
     <aside class="sidebar">
-      <div class="sidebar-lbl">Tage</div>
-      <div id="day-list"></div>
+      <div class="sidebar-lbl">Kalenderwochen</div>
+      <div id="kw-list"></div>
     </aside>
     <main class="main" id="main"></main>
   </div>
@@ -468,7 +534,6 @@ const COLORS = {
   kcal: '#4ADE80', protein: '#60A5FA', fat: '#FBBF24', carbs: '#A78BFA', fiber: '#34D399'
 };
 
-// Vegane Lebensmittelquellen pro Nährstoff
 const FOOD_SOURCES = {
   'Vitamin C':    'Paprika, Rotkohl, Petersilie, Brokkoli, Zitrusfrüchte',
   'Vitamin D':    'Supplement unverzichtbar — keine ausreichende vegane Quelle',
@@ -517,13 +582,76 @@ function fmtNote(text) {
 }
 function toggleMeal(el) { el.classList.toggle('open'); }
 
+// ─── KW HELPERS ───────────────────────────────────────────────
+// Parse "DD.MM." string → Date object (use current year)
+function parseDate(ddmm) {
+  const parts = ddmm.replace(/\.$/, '').split('.');
+  const dd = parseInt(parts[0]), mm = parseInt(parts[1]);
+  const year = new Date().getFullYear();
+  // Handle year wrap (Dec dates when current month is Jan)
+  const d = new Date(year, mm - 1, dd);
+  return d;
+}
+
+// ISO week number for a Date
+function isoWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+// ISO week number of today
+function currentIsoWeek() {
+  return isoWeek(new Date());
+}
+
+// Format Date as "DD.MM."
+function fmtShort(date) {
+  return pad(date.getDate()) + '.' + pad(date.getMonth() + 1) + '.';
+}
+
+// Monday and Sunday of an ISO week
+function weekBounds(isoWkNum, year) {
+  // Find a Thursday in that week (ISO weeks start Mon)
+  const simple = new Date(year, 0, 1 + (isoWkNum - 1) * 7);
+  const dow = simple.getDay();
+  const isoWeekStart = new Date(simple);
+  isoWeekStart.setDate(simple.getDate() - (dow <= 4 ? dow - 1 : dow - 8));
+  const isoWeekEnd = new Date(isoWeekStart);
+  isoWeekEnd.setDate(isoWeekStart.getDate() + 6);
+  return { mon: isoWeekStart, sun: isoWeekEnd };
+}
+
+// Group sorted date strings by ISO week → Map<kwNum, string[]>
+function groupByKW(sortedDates) {
+  const map = new Map(); // key: "YYYY-WW"
+  for (const d of sortedDates) {
+    const date = parseDate(d);
+    const kw   = isoWeek(date);
+    const yr   = date.getFullYear();
+    const key  = yr + '-' + pad(kw);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(d);
+  }
+  return map;
+}
+
+// Header badge: Mo DD.MM. – So DD.MM. for a week group
+function weekRangeLabel(dates) {
+  const parsed = dates.map(d => parseDate(d));
+  parsed.sort((a, b) => a - b);
+  const mon = parsed[0], sun = parsed[parsed.length - 1];
+  return 'Mo ' + fmtShort(mon) + ' – So ' + fmtShort(sun);
+}
+
 // ─── PARSER ───────────────────────────────────────────────────
 function parseMD(text) {
   const lines = text.split('\n');
   const meals    = [];
   const totals   = {};
-  const micros   = {};   // { 'DD.MM.': { 'Nährstoff': { gesamt, empf, pct, status } } }
-  const notes    = [];   // { text, date, type }
+  const micros   = {};
+  const notes    = [];
   let week       = '';
   let ctx        = null;
   let totalDate  = null;
@@ -533,13 +661,11 @@ function parseMD(text) {
   for (const raw of lines) {
     const t = raw.trim();
 
-    // ── Week header
     if (/^##\s*(Woche|KW)/.test(t)) {
       week = t.replace(/^#+\s*/, '');
       continue;
     }
 
-    // ── Section detection (order matters — specific before catch-all)
     if (/^###\s*Makronährstoffe/.test(t)) {
       ctx = 'macros'; skipNext = true; continue;
     }
@@ -558,30 +684,24 @@ function parseMD(text) {
     if (/^##\s*Analyse-Notizen/.test(t)) {
       ctx = 'notes'; continue;
     }
-    // Catch-all: any other heading resets context
     if (/^###/.test(t) || (/^##/.test(t) && !/Woche|KW|Analyse/.test(t))) {
       ctx = null; continue;
     }
 
-    // ── Notes bullet points (before the | filter)
     if (ctx === 'notes' && t.startsWith('-')) {
       const dm = t.match(/(\d{1,2})\.(\d{1,2})/);
       const date = dm ? pad(dm[1]) + '.' + pad(dm[2]) + '.' : null;
-      // Detect type: 'gesamt' notes get green border, critical ones get amber
       const type = /kritisch|strukturell|niedrig|fehlt/i.test(t) ? 'n-warn' : 'n-total';
       notes.push({ text: t.replace(/^-\s*/, ''), date, type });
       continue;
     }
 
-    // ── Table rows only from here
     if (!t.startsWith('|')) continue;
-    if (/^\|[\s\-|:]+$/.test(t)) continue; // separator
-
-    if (skipNext) { skipNext = false; continue; } // header row
+    if (/^\|[\s\-|:]+$/.test(t)) continue;
+    if (skipNext) { skipNext = false; continue; }
 
     const cells = t.split('|').slice(1, -1).map(c => c.trim());
 
-    // ── Macros
     if (ctx === 'macros' && cells.length >= 6) {
       const dm = cells[0].match(/(\d{1,2})\.(\d{1,2})/);
       if (!dm) continue;
@@ -596,7 +716,6 @@ function parseMD(text) {
       });
     }
 
-    // ── Daily totals
     if (ctx === 'total' && totalDate && cells.length >= 4) {
       const kcal = int(cells[0]);
       if (kcal > 100) {
@@ -607,9 +726,6 @@ function parseMD(text) {
       }
     }
 
-    // ── Micronutrients
-    // Format: | Nährstoff | Meal1 | ... | Gesamt | Empf./Tag | % | Status |
-    // → last 4 columns are always Gesamt, Empf., %, Status
     if (ctx === 'micro' && microDate && cells.length >= 5 && cells[0] !== 'Nährstoff') {
       const len = cells.length;
       if (!micros[microDate]) micros[microDate] = {};
@@ -622,7 +738,6 @@ function parseMD(text) {
     }
   }
 
-  // Group meals by date
   const days = {};
   for (const m of meals) {
     (days[m.date] = days[m.date] || []).push(m);
@@ -632,27 +747,107 @@ function parseMD(text) {
 }
 
 // ─── STATE ────────────────────────────────────────────────────
-let data       = null;
-let activeDate = null;
+let data        = null;
+let activeDate  = null;
+let openKWs     = new Set(); // which KW groups are expanded
 
 // ─── RENDER SIDEBAR ───────────────────────────────────────────
 function renderSidebar() {
-  const list = document.getElementById('day-list');
+  const list = document.getElementById('kw-list');
   list.innerHTML = '';
-  for (const d of Object.keys(data.days).sort()) {
-    const kcal = data.days[d].reduce((s, m) => s + m.kcal, 0);
-    const el = document.createElement('div');
-    el.className = 'day-row' + (d === activeDate ? ' active' : '');
-    el.innerHTML = `<span class="day-date">${d}</span><span class="day-kcal">${kcal}</span>`;
-    el.onclick = () => selectDay(d);
-    list.appendChild(el);
+
+  const sortedDates = Object.keys(data.days).sort();
+  const kwMap = groupByKW(sortedDates);
+  const curKW = currentIsoWeek();
+  const curYr = new Date().getFullYear();
+  const curKey = curYr + '-' + pad(curKW);
+
+  for (const [kwKey, dates] of kwMap) {
+    const [yr, wn] = kwKey.split('-');
+    const kwNum = parseInt(wn);
+    const isCurrent = kwKey === curKey;
+
+    const isOpen = openKWs.has(kwKey);
+
+    // Week range from actual dates in data
+    const datesInGroup = dates.slice().sort();
+    const parsedDates  = datesInGroup.map(d => parseDate(d)).sort((a, b) => a - b);
+    const rangeStr     = fmtShort(parsedDates[0]) + ' – ' + fmtShort(parsedDates[parsedDates.length - 1]);
+
+    const group = document.createElement('div');
+    group.className = 'kw-group' + (isOpen ? ' open' : '');
+    group.dataset.kwkey = kwKey;
+
+    const hdr = document.createElement('div');
+    hdr.className = 'kw-header' + (isCurrent ? ' current-week' : '');
+    hdr.innerHTML = `
+      <div class="kw-meta">
+        <div class="kw-label">KW ${kwNum}</div>
+        <div class="kw-range">${rangeStr}</div>
+      </div>
+      <div class="kw-chevron">▾</div>`;
+    hdr.onclick = () => toggleKW(kwKey);
+
+    const daysEl = document.createElement('div');
+    daysEl.className = 'kw-days';
+
+    for (const d of datesInGroup) {
+      const kcal = data.days[d].reduce((s, m) => s + m.kcal, 0);
+      const row  = document.createElement('div');
+      row.className = 'day-row' + (d === activeDate ? ' active' : '');
+      row.innerHTML = `<span class="day-date">${d}</span><span class="day-kcal">${kcal}</span>`;
+      row.onclick = () => selectDay(d);
+      daysEl.appendChild(row);
+    }
+
+    group.appendChild(hdr);
+    group.appendChild(daysEl);
+    list.appendChild(group);
   }
+}
+
+function toggleKW(kwKey) {
+  if (openKWs.has(kwKey)) {
+    openKWs.delete(kwKey);
+  } else {
+    openKWs.add(kwKey);
+  }
+  renderSidebar();
 }
 
 function selectDay(date) {
   activeDate = date;
+  // Ensure the KW containing this date is open
+  const d    = parseDate(date);
+  const kw   = isoWeek(d);
+  const yr   = d.getFullYear();
+  const key  = yr + '-' + pad(kw);
+  openKWs.add(key);
   renderSidebar();
+  updateHeaderBadge();
   renderMain();
+}
+
+// ─── HEADER BADGE ─────────────────────────────────────────────
+function updateHeaderBadge() {
+  // Show range for the week of the active date; fallback to current KW
+  const badge = document.getElementById('week-badge');
+  if (!activeDate) { badge.textContent = data.week || '—'; return; }
+
+  const d   = parseDate(activeDate);
+  const kw  = isoWeek(d);
+  const yr  = d.getFullYear();
+  const key = yr + '-' + pad(kw);
+
+  // Collect all dates in same week
+  const sortedDates = Object.keys(data.days).sort();
+  const kwMap = groupByKW(sortedDates);
+  const datesInWeek = kwMap.get(key) || [activeDate];
+  const parsed = datesInWeek.map(x => parseDate(x)).sort((a, b) => a - b);
+
+  const monStr = 'Mo ' + fmtShort(parsed[0]);
+  const sunStr = 'So ' + fmtShort(parsed[parsed.length - 1]);
+  badge.textContent = `KW ${kw} · ${monStr} – ${sunStr}`;
 }
 
 // ─── RENDER MAIN ──────────────────────────────────────────────
@@ -666,7 +861,6 @@ function renderMain() {
 
   const meals = data.days[activeDate];
 
-  // Computed totals from meals (fallback)
   const sum = {
     kcal:    meals.reduce((s, m) => s + m.kcal,    0),
     protein: meals.reduce((s, m) => s + m.protein, 0),
@@ -676,7 +870,6 @@ function renderMain() {
   };
   const tot = data.totals[activeDate] || sum;
 
-  // ── Stat cards
   const STATS = [
     { key: 'kcal',    label: 'kcal',    unit: 'kcal' },
     { key: 'protein', label: 'Protein', unit: 'g'    },
@@ -721,7 +914,6 @@ function renderMain() {
       </div>`
     ).join('') + `</div>`;
 
-  // ── Progress toward goals
   const progHTML = `
     <hr class="divider">
     <div class="sec-title">Tagesziele</div>
@@ -741,11 +933,9 @@ function renderMain() {
         </div>`;
     }).join('') + `</div>`;
 
-  // ── Micronutrients
   let microHTML = '';
   const micro = data.micros[activeDate];
   if (micro && Object.keys(micro).length > 0) {
-    // Sort: 🔴 first, then 🟡, then 🟢
     const STATUS_ORDER = ['🔴', '🟡', '🟢'];
     const entries = Object.entries(micro).sort((a, b) => {
       const ia = STATUS_ORDER.findIndex(e => (a[1].status || '').includes(e));
@@ -775,7 +965,6 @@ function renderMain() {
           </div>`;
       }).join('') + `</div>`;
 
-    // ── Deficit: tomorrow compensation
     const deficits = entries.filter(([, m]) => (m.status || '').includes('🔴'));
     if (deficits.length > 0) {
       microHTML += `
@@ -795,9 +984,7 @@ function renderMain() {
     }
   }
 
-  // ── Analysis notes
   let notesHTML = '';
-  // Show notes that match current date OR have no date (general notes)
   const dayNotes = data.notes.filter(n =>
     !n.date || n.date === activeDate ||
     n.text.includes(activeDate.replace(/\.$/, ''))
@@ -832,9 +1019,18 @@ function loadFile(file) {
       document.getElementById('upload-screen').style.display = 'none';
       document.getElementById('dashboard').style.display = 'flex';
       document.getElementById('dashboard').style.flexDirection = 'column';
-      document.getElementById('week-badge').textContent = data.week || 'Aktuelle Woche';
+
+      // Select most recent day
       activeDate = dates[dates.length - 1];
+
+      // Auto-open the KW of the most recent day
+      const d   = parseDate(activeDate);
+      const kw  = isoWeek(d);
+      const yr  = d.getFullYear();
+      openKWs.add(yr + '-' + pad(kw));
+
       renderSidebar();
+      updateHeaderBadge();
       renderMain();
     } catch(err) {
       alert('Fehler: ' + err.message);
