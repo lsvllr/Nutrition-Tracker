@@ -239,59 +239,133 @@ body {
 
 .kw-group.open .kw-days { display: block; }
 
-/* Mobile: Sidebar wird horizontal Scroll-Liste mit direkten Day-Buttons */
+/* Mobile: KW + Tage in einer horizontalen Scroll-Zeile */
 @media (max-width: 767px) {
   .kw-days { display: none !important; }
-  
-  /* Mobile-only: Tage direkt in der Sidebar als horizontale Buttons */
-  #mobile-day-bar {
-    display: flex;
+  #kw-list  { display: none !important; }
+
+  .sidebar {
+    flex-direction: column !important;
+    width: 100% !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    height: auto !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  .sidebar-lbl { display: none; }
+
+  /* Eine horizontale Scroll-Zeile für KWs + Tage */
+  #mobile-kw-bar {
+    display: flex !important;
+    flex-direction: row;
     align-items: center;
-    gap: 8px;
-    overflow-x: auto;
+    gap: 6px;
     padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: visible;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    position: relative;
   }
-  
-  #mobile-day-bar::-webkit-scrollbar { display: none; }
-  
-  .mobile-day-btn {
+  #mobile-kw-bar::-webkit-scrollbar { display: none; }
+
+  /* Separator zwischen KW-Gruppe und Tagen */
+  .mobile-kw-group {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
     flex-shrink: 0;
-    display: flex;
+  }
+
+  .mobile-kw-btn {
+    flex-shrink: 0;
+    display: inline-flex;
     flex-direction: column;
     align-items: center;
-    padding: 8px 12px;
-    border-radius: 10px;
+    padding: 6px 14px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--bg3);
     cursor: pointer;
-    transition: .15s;
-    min-width: 52px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text);
+    white-space: nowrap;
+    transition: background .15s, border-color .15s, color .15s;
+    position: relative;
+    z-index: 2;
   }
-  
+  .mobile-kw-btn:active { opacity: .7; }
+  .mobile-kw-btn.active {
+    background: rgba(74,222,128,0.15);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .mobile-kw-btn .mkw-range {
+    font-size: 8px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .mobile-kw-btn.active .mkw-range { color: rgba(74,222,128,0.5); }
+
+  /* Tage-Container: unsichtbar, 0-Breite, slide nach rechts */
+  .mobile-days-container {
+    display: inline-flex;
+    flex-direction: row;
+    gap: 6px;
+    flex-shrink: 0;
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    transform: translateX(-12px);
+    transition:
+      max-width .3s cubic-bezier(.4,0,.2,1),
+      opacity   .25s ease,
+      transform .3s cubic-bezier(.4,0,.2,1);
+  }
+  .mobile-days-container.open {
+    max-width: 800px;   /* groß genug für alle Tage */
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .mobile-day-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    transition: background .15s, border-color .15s;
+    white-space: nowrap;
+  }
   .mobile-day-btn:active { opacity: .7; }
-  
   .mobile-day-btn.active {
     background: rgba(74,222,128,0.12);
     border-color: var(--green);
   }
-  
   .mobile-day-btn .mdb-date {
-    font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: 500;
     color: var(--text);
   }
-  
   .mobile-day-btn.active .mdb-date { color: var(--green); }
-  
   .mobile-day-btn .mdb-kcal {
-    font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
     color: var(--muted);
     margin-top: 2px;
   }
+
+  /* mobile-day-bar wrapper (nicht mehr gebraucht, leer lassen) */
+  #mobile-day-bar { display: none !important; }
 }
 
 /* animate open */
@@ -407,7 +481,12 @@ body {
   color: var(--muted);
   font-size: 12px;
   transition: transform .2s ease;
-  text-align: right;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  transform-origin: center center;
   line-height: 1;
 }
 
@@ -770,6 +849,7 @@ body {
     <aside class="sidebar">
       <div class="sidebar-lbl">Kalenderwochen</div>
       <div id="kw-list"></div>
+      <div id="mobile-kw-bar" style="display:none"></div>
       <div id="mobile-day-bar" style="display:none"></div>
     </aside>
     <main class="main" id="main"></main>
@@ -1172,11 +1252,16 @@ function getAW(date) {
 }
 
 // ─── RENDER SIDEBAR ───────────────────────────────────────────
+// Tracks which KW is expanded on mobile
+let mobileOpenKW = null;
+
 function renderSidebar() {
-  const list = document.getElementById('kw-list');
-  const mobilebar = document.getElementById('mobile-day-bar');
-  list.innerHTML = '';
-  mobilebar.innerHTML = '';
+  const list     = document.getElementById('kw-list');
+  const kwBar    = document.getElementById('mobile-kw-bar');
+  const dayBar   = document.getElementById('mobile-day-bar');
+  list.innerHTML   = '';
+  kwBar.innerHTML  = '';
+  dayBar.innerHTML = '';
 
   const sortedDates = Object.keys(data.days).sort();
   const kwMap = groupByKW(sortedDates);
@@ -1186,19 +1271,54 @@ function renderSidebar() {
   
   const isMobile = window.innerWidth < 768;
 
-  // ── Mobile: alle Tage flach als horizontale Buttons
+  // ── Mobile: KW-Kachel + Tage direkt daneben in einer Zeile
   if (isMobile) {
-    for (const d of sortedDates) {
-      const kcal = data.days[d].reduce((s, m) => s + m.kcal, 0);
-      const btn = document.createElement('button');
-      btn.className = 'mobile-day-btn' + (d === activeDate ? ' active' : '');
-      btn.innerHTML = `<span class="mdb-date">${d}</span><span class="mdb-kcal">${kcal} kcal</span>`;
-      btn.onclick = () => selectDay(d);
-      mobilebar.appendChild(btn);
+    // Auto-open KW of active date if none set
+    if (!mobileOpenKW) {
+      const d = parseDate(activeDate);
+      const kw = isoWeek(d);
+      const yr = d.getFullYear();
+      mobileOpenKW = yr + '-' + pad(kw);
     }
-    // Nach render aktiven Tag sichtbar scrollen
-    const active = mobilebar.querySelector('.mobile-day-btn.active');
-    if (active) setTimeout(() => active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
+
+    for (const [kwKey, dates] of kwMap) {
+      const [, wn] = kwKey.split('-');
+      const kwNum = parseInt(wn);
+      const datesInGroup = dates.slice().sort();
+      const parsedDates = datesInGroup.map(d => parseDate(d)).sort((a, b) => a - b);
+      const rangeStr = fmtShort(parsedDates[0]) + ' – ' + fmtShort(parsedDates[parsedDates.length - 1]);
+      const isActive = kwKey === mobileOpenKW;
+
+      // KW-Gruppe: KW-Button + Tage-Container nebeneinander
+      const group = document.createElement('div');
+      group.className = 'mobile-kw-group';
+      group.dataset.kwkey = kwKey;
+
+      const btn = document.createElement('button');
+      btn.className = 'mobile-kw-btn' + (isActive ? ' active' : '');
+      btn.innerHTML = `<span>KW ${kwNum}</span><span class="mkw-range">${rangeStr}</span>`;
+      btn.onclick = () => toggleMobileKW(kwKey);
+
+      const daysContainer = document.createElement('div');
+      daysContainer.className = 'mobile-days-container' + (isActive ? ' open' : '');
+
+      datesInGroup.forEach(d => {
+        const kcal = data.days[d].reduce((s, m) => s + m.kcal, 0);
+        const dayBtn = document.createElement('button');
+        dayBtn.className = 'mobile-day-btn' + (d === activeDate ? ' active' : '');
+        dayBtn.innerHTML = `<span class="mdb-date">${d}</span><span class="mdb-kcal">${kcal} kcal</span>`;
+        dayBtn.onclick = () => selectDay(d);
+        daysContainer.appendChild(dayBtn);
+      });
+
+      group.appendChild(btn);
+      group.appendChild(daysContainer);
+      kwBar.appendChild(group);
+    }
+
+    // Scroll aktive KW in Sicht
+    const activeKwBtn = kwBar.querySelector('.mobile-kw-btn.active');
+    if (activeKwBtn) setTimeout(() => activeKwBtn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
     return;
   }
 
@@ -1243,6 +1363,39 @@ function renderSidebar() {
     group.appendChild(daysEl);
     list.appendChild(group);
   }
+}
+
+function toggleMobileKW(kwKey) {
+  const isMobile = window.innerWidth < 768;
+  if (!isMobile) return;
+
+  // Alle Gruppen durchgehen und per data-kwkey matchen
+  const groups = document.querySelectorAll('.mobile-kw-group');
+  groups.forEach(group => {
+    const btn = group.querySelector('.mobile-kw-btn');
+    const container = group.querySelector('.mobile-days-container');
+    if (!btn || !container) return;
+    const thisKey = group.dataset.kwkey;
+    
+    if (thisKey === kwKey) {
+      const isNowOpen = container.classList.contains('open');
+      if (isNowOpen) {
+        // Schließen
+        container.classList.remove('open');
+        btn.classList.remove('active');
+        mobileOpenKW = null;
+      } else {
+        // Öffnen
+        container.classList.add('open');
+        btn.classList.add('active');
+        mobileOpenKW = kwKey;
+      }
+    } else {
+      // Andere schließen
+      container.classList.remove('open');
+      btn.classList.remove('active');
+    }
+  });
 }
 
 function toggleKW(kwKey) {
