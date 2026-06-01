@@ -547,14 +547,14 @@ body {
 
 <body>
 
-<input type="file" id="file-input" accept=".md,.txt" style="display:none">
+<input type="file" id="file-input" accept=".json,.md,.txt" style="display:none">
 
 <!-- ══ UPLOAD ════════════════════════════════════════════════ -->
 <div id="upload-screen">
   <div class="drop-zone" id="drop-zone">
     <span class="drop-icon">🌿</span>
     <h1>Nutrition Tracker</h1>
-    <p class="sub">nutrition.md laden</p>
+    <p class="sub">nutrition.json oder nutrition.md laden</p>
     <button class="btn" id="open-btn">Datei öffnen</button>
     <p class="drop-hint">oder hierher ziehen</p>
   </div>
@@ -710,6 +710,110 @@ function weekRangeLabel(dates) {
 }
 
 // ─── PARSER ───────────────────────────────────────────────────
+
+/**
+ * Parse nutrition.json into dashboard format
+ */
+function parseJSON(jsonText) {
+  const raw = JSON.parse(jsonText);
+  const days = {};
+  const totals = {};
+  const micros = {};
+  const notes = [];
+  const energy = {};
+  let week = '';
+
+  // Iterate through weeks → days → meals
+  raw.weeks.forEach(w => {
+    week = 'KW ' + w.week + ' — ' + w.start_date + ' bis ' + w.end_date;
+    
+    w.days.forEach(day => {
+      const dateStr = day.date; // "2026-05-29"
+      const dateKey = dateStr.slice(8, 10) + '.' + dateStr.slice(5, 7) + '.'; // "29.05."
+      
+      // Meals array
+      const dayMeals = [];
+      if (day.meals && Array.isArray(day.meals)) {
+        day.meals.forEach(m => {
+          dayMeals.push({
+            date: dateKey,
+            meal: m.meal_type.charAt(0).toUpperCase() + m.meal_type.slice(1),
+            kcal: m.kcal,
+            protein: m.macros.protein_g,
+            fat: m.macros.fat_g,
+            carbs: m.macros.carbs_g,
+            fiber: m.macros.fiber_g,
+            notes: m.foods ? m.foods.join(', ') : ''
+          });
+        });
+      }
+      (days[dateKey] = days[dateKey] || []).push(...dayMeals);
+      
+      // Daily totals
+      if (day.daily_summary) {
+        totals[dateKey] = {
+          kcal: day.daily_summary.kcal,
+          protein: day.daily_summary.macros.protein_g,
+          fat: day.daily_summary.macros.fat_g,
+          carbs: day.daily_summary.macros.carbs_g,
+          fiber: day.daily_summary.macros.fiber_g
+        };
+      }
+      
+      // Energy balance (Apple Watch)
+      if (day.energy_balance) {
+        const eaten = day.energy_balance.consumed_kcal;
+        const burned = day.energy_balance.burned_apple_watch_kcal;
+        if (burned > 0) {
+          energy[dateKey] = { eaten, burned };
+        }
+      }
+      
+      // Micronutrients
+      if (day.micronutrients && day.micronutrient_status) {
+        const micro = {};
+        Object.entries(day.micronutrients).forEach(([key, val]) => {
+          const humanKey = key
+            .replace(/_/g, ' ')
+            .split(' ')
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+          const status = day.micronutrient_status[key] || '—';
+          
+          // Find target value
+          let empf = '—';
+          if (raw.micronutrient_targets && raw.micronutrient_targets[key]) {
+            empf = raw.micronutrient_targets[key].daily_target;
+          }
+          
+          const pct = empf !== '—' ? Math.round(val / empf * 100) + '%' : '—';
+          micro[humanKey] = {
+            gesamt: val,
+            empf: empf,
+            pct: pct,
+            status: status
+          };
+        });
+        micros[dateKey] = micro;
+      }
+      
+      // Notes
+      if (day.notes) {
+        notes.push({
+          text: day.notes,
+          date: dateKey,
+          type: ''
+        });
+      }
+    });
+  });
+
+  return { days, totals, micros, notes, week, energy };
+}
+
+/**
+ * LEGACY: Parse nutrition.md (fallback if user has old file)
+ */
 function parseMD(text) {
   const lines = text.split('\n');
   const meals    = [];
@@ -1218,10 +1322,22 @@ function loadFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      data = parseMD(e.target.result);
+      const content = e.target.result;
+      
+      // Auto-detect JSON vs MD
+      let parsedData;
+      if (file.name.endsWith('.json') || content.trim().startsWith('{')) {
+        // JSON format
+        parsedData = parseJSON(content);
+      } else {
+        // MD format (default)
+        parsedData = parseMD(content);
+      }
+      
+      data = parsedData;
       const dates = Object.keys(data.days).sort();
       if (!dates.length) {
-        alert('Keine Mahlzeiten gefunden. nutrition.md prüfen.');
+        alert('Keine Mahlzeiten gefunden. nutrition.json oder nutrition.md prüfen.');
         return;
       }
       document.getElementById('upload-screen').style.display = 'none';
