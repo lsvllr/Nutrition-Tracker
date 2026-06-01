@@ -1,3 +1,5 @@
+---
+---
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -913,6 +915,12 @@ function statusColor(status) {
   if ((status || '').includes('🟡')) return 'var(--amber)';
   return 'var(--red)';
 }
+// Balkenfarbe direkt auf Prozentwert — unabhängig vom Status-Emoji
+function barColor(pctN) {
+  if (pctN >= 90) return 'var(--green)';
+  if (pctN >= 50) return 'var(--amber)';
+  return 'var(--red)';
+}
 function fmtNote(text) {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -1577,8 +1585,8 @@ function renderMain() {
       <div class="micro-grid">` +
       entries.map(([name, m]) => {
         const cls   = statusClass(m.status);
-        const color = statusColor(m.status);
         const pctN  = parsePct(m.pct);
+        const color = barColor(pctN);
         return `
           <div class="micro-card ${cls}">
             <div class="mc-name">${name}</div>
