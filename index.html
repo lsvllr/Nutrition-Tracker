@@ -1,3 +1,5 @@
+---
+---
 <!DOCTYPE html>
 <html lang="de">
 <head>
@@ -223,6 +225,9 @@ body {
   color: var(--muted);
   transition: transform .2s ease;
   flex-shrink: 0;
+  display: inline-block;
+  transform-origin: 50% 50%;
+  line-height: 1;
 }
 
 .kw-group.open .kw-chevron { transform: rotate(180deg); }
@@ -234,9 +239,59 @@ body {
 
 .kw-group.open .kw-days { display: block; }
 
-/* Mobile: Sidebar wird horizontal Scroll-Liste */
+/* Mobile: Sidebar wird horizontal Scroll-Liste mit direkten Day-Buttons */
 @media (max-width: 767px) {
   .kw-days { display: none !important; }
+  
+  /* Mobile-only: Tage direkt in der Sidebar als horizontale Buttons */
+  #mobile-day-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 12px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  #mobile-day-bar::-webkit-scrollbar { display: none; }
+  
+  .mobile-day-btn {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    cursor: pointer;
+    transition: .15s;
+    min-width: 52px;
+  }
+  
+  .mobile-day-btn:active { opacity: .7; }
+  
+  .mobile-day-btn.active {
+    background: rgba(74,222,128,0.12);
+    border-color: var(--green);
+  }
+  
+  .mobile-day-btn .mdb-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  
+  .mobile-day-btn.active .mdb-date { color: var(--green); }
+  
+  .mobile-day-btn .mdb-kcal {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
 }
 
 /* animate open */
@@ -572,17 +627,18 @@ body {
   .sidebar {
     width: 100%;
     min-width: auto;
-    max-height: 120px;
-    overflow-x: auto;
-    overflow-y: hidden;
     border-right: none;
     border-bottom: 1px solid var(--border);
-    padding: 12px 0;
-    display: flex;
-    gap: 8px;
+    padding: 0;
+    overflow: visible;
+    background: var(--bg2);
   }
   
+  /* Akkordion auf Mobile ausblenden */
+  .sidebar > div:not(#mobile-day-bar) { display: none; }
   .sidebar-lbl { display: none; }
+  
+  #mobile-day-bar { display: flex; }
   
   .kw-group { margin-bottom: 0; display: inline-flex; flex-direction: column; flex-shrink: 0; }
   .kw-header { padding: 6px 10px; font-size: 10px; border-left: none; border-bottom: 2px solid transparent; width: 90px; }
@@ -714,6 +770,7 @@ body {
     <aside class="sidebar">
       <div class="sidebar-lbl">Kalenderwochen</div>
       <div id="kw-list"></div>
+      <div id="mobile-day-bar" style="display:none"></div>
     </aside>
     <main class="main" id="main"></main>
   </div>
@@ -1117,7 +1174,9 @@ function getAW(date) {
 // ─── RENDER SIDEBAR ───────────────────────────────────────────
 function renderSidebar() {
   const list = document.getElementById('kw-list');
+  const mobilebar = document.getElementById('mobile-day-bar');
   list.innerHTML = '';
+  mobilebar.innerHTML = '';
 
   const sortedDates = Object.keys(data.days).sort();
   const kwMap = groupByKW(sortedDates);
@@ -1125,17 +1184,31 @@ function renderSidebar() {
   const curYr = new Date().getFullYear();
   const curKey = curYr + '-' + pad(curKW);
   
-  // Mobile detection
   const isMobile = window.innerWidth < 768;
 
+  // ── Mobile: alle Tage flach als horizontale Buttons
+  if (isMobile) {
+    for (const d of sortedDates) {
+      const kcal = data.days[d].reduce((s, m) => s + m.kcal, 0);
+      const btn = document.createElement('button');
+      btn.className = 'mobile-day-btn' + (d === activeDate ? ' active' : '');
+      btn.innerHTML = `<span class="mdb-date">${d}</span><span class="mdb-kcal">${kcal} kcal</span>`;
+      btn.onclick = () => selectDay(d);
+      mobilebar.appendChild(btn);
+    }
+    // Nach render aktiven Tag sichtbar scrollen
+    const active = mobilebar.querySelector('.mobile-day-btn.active');
+    if (active) setTimeout(() => active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' }), 50);
+    return;
+  }
+
+  // ── Desktop: Akkordion
   for (const [kwKey, dates] of kwMap) {
     const [yr, wn] = kwKey.split('-');
     const kwNum = parseInt(wn);
     const isCurrent = kwKey === curKey;
-
     const isOpen = openKWs.has(kwKey);
 
-    // Week range from actual dates in data
     const datesInGroup = dates.slice().sort();
     const parsedDates  = datesInGroup.map(d => parseDate(d)).sort((a, b) => a - b);
     const rangeStr     = fmtShort(parsedDates[0]) + ' – ' + fmtShort(parsedDates[parsedDates.length - 1]);
